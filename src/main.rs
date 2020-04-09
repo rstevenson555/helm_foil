@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::process::{Command, Output, Stdio};
+use std::process::{Command as ProcessCommand, Output, Stdio};
 use std::{env, fs};
 
 use clap::{
@@ -10,106 +10,6 @@ use clap::{
     SubCommand,
 };
 use regex::Regex;
-
-fn parse_command_line<'a>() -> ArgMatches<'a> {
-    app_from_crate!()
-        // helm install subcommand
-        .subcommand(
-            SubCommand::with_name("install")
-                .about("install a new application")
-                .arg(
-                    Arg::with_name("CHART")
-                        .required(true)
-                        .takes_value(true)
-                        .help("directory location of the chart"),
-                )
-                .arg(
-                    Arg::with_name("name")
-                        .takes_value(true)
-                        .long("name")
-                        .short("n"),
-                )
-                .arg(
-                    Arg::with_name("valueFiles")
-                        .takes_value(true)
-                        .multiple(true)
-                        .long("values")
-                        .short("f"),
-                )
-                .arg(
-                    Arg::with_name("set")
-                        .multiple(true)
-                        .long("set")
-                        .takes_value(true)
-                        .help("set a variable override"),
-                ),
-        )
-        // helm upgrade subcommand
-        .subcommand(
-            SubCommand::with_name("upgrade")
-                .about("upgrade a application")
-                .arg(
-                    Arg::with_name("RELEASE")
-                        .required(true)
-                        .takes_value(true)
-                        .help("name the deployment with this value"),
-                )
-                .arg(
-                    Arg::with_name("CHART")
-                        .required(true)
-                        .takes_value(true)
-                        .default_value("")
-                        .help("directory location of the chart"),
-                )
-                .arg(
-                    Arg::with_name("valueFiles")
-                        .takes_value(true)
-                        .multiple(true)
-                        .long("values")
-                        .short("f"),
-                )
-                .arg(
-                    Arg::with_name("force")
-                        .long("force")
-                        .help("Force the installation"),
-                )
-                .arg(
-                    Arg::with_name("set")
-                        .multiple(true)
-                        .long("set")
-                        .takes_value(true)
-                        .help("set a variable override"),
-                ),
-        ) // now set global options
-        .arg(
-            Arg::with_name("tiller-namespace")
-                .long("tiller-namespace")
-                .global(true)
-                .help("Specify the namespace to look for tiller")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("namespace")
-                .long("namespace")
-                .global(true)
-                .help("Specify the namespace")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("timeout")
-                .long("timeout")
-                .global(true)
-                .help("Specify the timeout")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("debug")
-                .long("debug")
-                .global(true)
-                .help("Specify debug mode"),
-        )
-        .get_matches()
-}
 
 fn read_values_file(filename: &str) -> String {
     let error_msg = format!("Something went wrong reading the file {}", filename);
@@ -335,7 +235,7 @@ fn handle_install(matches: &ArgMatches, command: &Option<&str>, helm_home_dir: S
     let mut variable_formatted: GlobalVariableMap = GlobalVariableMap::new();
     let mut variable_raw: GlobalVariableRawMap = GlobalVariableRawMap::new();
     if let Some(install_command) = matches.subcommand_matches(command.unwrap()) {
-        let mut helm_command: Command = Command::new(format!("{}/helm", helm_home_dir));
+        let mut helm_command = ProcessCommand::new(format!("{}/helm", helm_home_dir));
         helm_command
             .stderr(Stdio::piped())
             .stdout(Stdio::piped())
@@ -368,7 +268,7 @@ fn handle_upgrade(matches: &ArgMatches, command: &Option<&str>, helm_home_dir: S
     let mut variable_formatted: GlobalVariableMap = GlobalVariableMap::new();
     let mut variable_raw: GlobalVariableRawMap = GlobalVariableRawMap::new();
     if let Some(upgrade_command) = matches.subcommand_matches(command.unwrap()) {
-        let mut helm_command = Command::new(format!("{}/helm", helm_home_dir));
+        let mut helm_command = ProcessCommand::new(format!("{}/helm", helm_home_dir));
         helm_command
             .stderr(Stdio::piped())
             .stdout(Stdio::piped())
@@ -403,7 +303,7 @@ fn handle_upgrade(matches: &ArgMatches, command: &Option<&str>, helm_home_dir: S
 fn get_and_set_chart_name(
     variable_raw: &mut GlobalVariableRawMap,
     upgrade_command: &ArgMatches,
-    helm_command: &mut Command,
+    helm_command: &dyn Command,
 ) {
     if upgrade_command.is_present("CHART") {
         let chart_path = upgrade_command.value_of("CHART").unwrap();
@@ -419,31 +319,301 @@ fn get_and_set_chart_name(
     }
 }
 
+trait Command {
+    fn new(name: &'static str) -> Self;
+    // Traits can provide default method definitions.
+    fn run(&self) {
+        println!("{} says {}", self.name(), self.noise());
+    }
+}
+
+pub struct UpgradeCommand<'a> {
+    helm_runtime: &'a ExecuteHelmCommands,
+}
+
+impl<'a> Command for UpgradeCommand<'a> {
+    fn new(execute_helm_command: &ExecuteHelmCommands) -> UpgradeCommand {
+        UpgradeCommand {
+            helm_runtime: execute_helm_command,
+        }
+    }
+
+    fn run(&self) {
+        println!("{} says {}", self.name(), self.noise());
+    }
+}
+
+impl<'a> UpgradeCommand<'a> {
+    //    pub(crate) fn new(execute_helm_command: &ExecuteHelmCommands) -> UpgradeCommand {
+    //        UpgradeCommand {
+    //            helm_runtime: execute_helm_command,
+    //        }
+    //    }
+
+    fn handle_upgrade(matches: &ArgMatches, command: &Option<&str>, helm_home_dir: String) {
+        let mut variable_formatted: GlobalVariableMap = GlobalVariableMap::new();
+        let mut variable_raw: GlobalVariableRawMap = GlobalVariableRawMap::new();
+        if let Some(upgrade_command) = matches.subcommand_matches(command.unwrap()) {
+            let mut helm_command = ProcessCommand::new(format!("{}/helm", helm_home_dir));
+            helm_command
+                .stderr(Stdio::piped())
+                .stdout(Stdio::piped())
+                .arg(command.unwrap());
+
+            if upgrade_command.is_present("RELEASE") {
+                helm_command.arg(upgrade_command.value_of("RELEASE").unwrap());
+                // add global variable key/value 'release.name'
+                variable_raw.insert(
+                    "release.name".to_string(),
+                    upgrade_command.value_of("RELEASE").unwrap().to_string(),
+                );
+            }
+            get_and_set_chart_name(&mut variable_raw, upgrade_command, &mut helm_command);
+
+            if upgrade_command.is_present("force") {
+                helm_command.arg("--force");
+            }
+
+            apply_common_args(
+                matches,
+                upgrade_command,
+                &mut helm_command,
+                &mut variable_formatted,
+                &mut variable_raw,
+            );
+
+            execute_helm(&mut helm_command)
+        }
+    }
+}
+
+pub struct InstallCommand<'a> {
+    helm_runtime: &'a ExecuteHelmCommands,
+}
+
+impl<'a> Command for InstallCommand<'a> {
+    fn new(execute_helm_command: &ExecuteHelmCommands) -> InstallCommand {
+        InstallCommand {
+            helm_runtime: execute_helm_command,
+        }
+    }
+
+    fn run(&self) {
+        println!("{} says {}", self.name(), self.noise());
+    }
+}
+
+impl<'a> InstallCommand<'a> {
+    //    pub(crate) fn new(execute_helm_command: &ExecuteHelmCommands) -> InstallCommand {
+    //        InstallCommand {
+    //            helm_runtime: execute_helm_command,
+    //        }
+    //    }
+    fn handle_install(matches: &ArgMatches, command: &Option<&str>, helm_home_dir: String) {
+        let mut variable_formatted: GlobalVariableMap = GlobalVariableMap::new();
+        let mut variable_raw: GlobalVariableRawMap = GlobalVariableRawMap::new();
+        if let Some(install_command) = matches.subcommand_matches(command.unwrap()) {
+            let mut helm_command = ProcessCommand::new(format!("{}/helm", helm_home_dir));
+            helm_command
+                .stderr(Stdio::piped())
+                .stdout(Stdio::piped())
+                .arg(command.unwrap());
+
+            get_and_set_chart_name(&mut variable_raw, install_command, &mut helm_command);
+
+            if install_command.is_present("name") {
+                helm_command.args(&["--name", install_command.value_of("name").unwrap()]);
+                // add global variable key/value 'release.name'
+                variable_raw.insert(
+                    "release.name".to_string(),
+                    install_command.value_of("name").unwrap().to_string(),
+                );
+            }
+
+            apply_common_args(
+                matches,
+                install_command,
+                &mut helm_command,
+                &mut variable_formatted,
+                &mut variable_raw,
+            );
+
+            execute_helm(&mut helm_command)
+        }
+    }
+}
+
+pub struct ExecuteHelmCommands {
+    variable_raw: HashMap<String, String>,
+    variable_formatted: HashMap<String, String>,
+}
+
+impl ExecuteHelmCommands {
+    pub(crate) fn new() -> ExecuteHelmCommands {
+        ExecuteHelmCommands {
+            variable_raw: HashMap::new(),
+            variable_formatted: HashMap::new(),
+        }
+    }
+
+    //    pub(crate) fn run(&self, command: &Command) -> () {}
+
+    pub(crate) fn get_raw_variables(&self) -> &HashMap<String, String> {
+        &self.variable_raw
+    }
+    pub(crate) fn get_formatted_variables(&self) -> &HashMap<String, String> {
+        &self.variable_formatted
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Main {}
+
+impl Main {
+    pub(crate) fn parse_command_line<'a>(self: &Main) -> ArgMatches<'a> {
+        app_from_crate!()
+            // helm install subcommand
+            .subcommand(
+                SubCommand::with_name("install")
+                    .about("install a new application")
+                    .arg(
+                        Arg::with_name("CHART")
+                            .required(true)
+                            .takes_value(true)
+                            .help("directory location of the chart"),
+                    )
+                    .arg(
+                        Arg::with_name("name")
+                            .takes_value(true)
+                            .long("name")
+                            .short("n"),
+                    )
+                    .arg(
+                        Arg::with_name("valueFiles")
+                            .takes_value(true)
+                            .multiple(true)
+                            .long("values")
+                            .short("f"),
+                    )
+                    .arg(
+                        Arg::with_name("set")
+                            .multiple(true)
+                            .long("set")
+                            .takes_value(true)
+                            .help("set a variable override"),
+                    ),
+            )
+            // helm upgrade subcommand
+            .subcommand(
+                SubCommand::with_name("upgrade")
+                    .about("upgrade a application")
+                    .arg(
+                        Arg::with_name("RELEASE")
+                            .required(true)
+                            .takes_value(true)
+                            .help("name the deployment with this value"),
+                    )
+                    .arg(
+                        Arg::with_name("CHART")
+                            .required(true)
+                            .takes_value(true)
+                            .default_value("")
+                            .help("directory location of the chart"),
+                    )
+                    .arg(
+                        Arg::with_name("valueFiles")
+                            .takes_value(true)
+                            .multiple(true)
+                            .long("values")
+                            .short("f"),
+                    )
+                    .arg(
+                        Arg::with_name("force")
+                            .long("force")
+                            .help("Force the installation"),
+                    )
+                    .arg(
+                        Arg::with_name("set")
+                            .multiple(true)
+                            .long("set")
+                            .takes_value(true)
+                            .help("set a variable override"),
+                    ),
+            ) // now set global options
+            .arg(
+                Arg::with_name("tiller-namespace")
+                    .long("tiller-namespace")
+                    .global(true)
+                    .help("Specify the namespace to look for tiller")
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("namespace")
+                    .long("namespace")
+                    .global(true)
+                    .help("Specify the namespace")
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("timeout")
+                    .long("timeout")
+                    .global(true)
+                    .help("Specify the timeout")
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("debug")
+                    .long("debug")
+                    .global(true)
+                    .help("Specify debug mode"),
+            )
+            .get_matches()
+    }
+    pub(crate) fn new() -> Main {
+        Main {}
+    }
+}
+
 fn main() {
-        let helm_home_dir;
-        if let Ok(homedir) = env::var("HELM_HOME") {
-            helm_home_dir = homedir;
-        } else {
-            panic!("Missing HELM_HOME environment variable");
-        }
+    let helm_home_dir;
+    if let Ok(homedir) = env::var("HELM_HOME") {
+        helm_home_dir = homedir;
+    } else {
+        panic!("Missing HELM_HOME environment variable");
+    }
 
-        let matches: ArgMatches = parse_command_line();
+    let main: Main = Main::new();
+    let matches: ArgMatches = main.parse_command_line();
 
-        match matches.subcommand_name() {
-            Some("upgrade") => handle_upgrade(&matches, &matches.subcommand_name(), helm_home_dir),
-            Some("install") => handle_install(&matches, &matches.subcommand_name(), helm_home_dir),
-            _ => {}
+    let execute_helm_commands = ExecuteHelmCommands::new();
+    match matches.subcommand_name() {
+        Some("install") => {
+            let insert_command: dyn Command = InstallCommand::new(&execute_helm_commands);
+            execute_helm_commands.run(&insert_command);
         }
-//    let pattern = format!("(?i)\\{{\\{{\\s*{}\\s*\\}}\\}}", ".Release.Name");
-//    println!("pattern is: {}", pattern);
-//    let release_name = Regex::new(pattern.as_str()).unwrap();
-//    let result: &mut String = &mut "".to_string();
-//
-//    *result = release_name
-//        .replace_all(
-//            "now is the time {{    .release.Name   }} for all good men",
-//            "master-6kdefg",
-//        )
-//        .into_owned();
-//    println!("result {}", result);
+        //        Some("upgrade") => handle_install(&matches, &matches.subcommand_name(), helm_home_dir),
+        Some("upgrade") => {
+            let upgrade_command: dyn Command = UpgradeCommand::new(&execute_helm_commands);
+            execute_helm_commands.run(&upgrade_command);
+        }
+        _ => {}
+    }
+
+    match matches.subcommand_name() {
+        Some("upgrade") => handle_upgrade(&matches, &matches.subcommand_name(), helm_home_dir),
+        Some("install") => handle_install(&matches, &matches.subcommand_name(), helm_home_dir),
+        _ => {}
+    }
+    //    let pattern = format!("(?i)\\{{\\{{\\s*{}\\s*\\}}\\}}", ".Release.Name");
+    //    println!("pattern is: {}", pattern);
+    //    let release_name = Regex::new(pattern.as_str()).unwrap();
+    //    let result: &mut String = &mut "".to_string();
+    //
+    //    *result = release_name
+    //        .replace_all(
+    //            "now is the time {{    .release.Name   }} for all good men",
+    //            "master-6kdefg",
+    //        )
+    //        .into_owned();
+    //    println!("result {}", result);
 }
