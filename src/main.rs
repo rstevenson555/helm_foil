@@ -102,7 +102,7 @@ fn replace_explicit_vars(
 fn apply_common_args(
     global_args: &ArgMatches,
     subcommand: &ArgMatches,
-    helm_command: &mut Command,
+    helm_command: &mut ProcessCommand,
     variable_formatted: &mut GlobalVariableMap,
     variable_raw: &mut GlobalVariableRawMap,
 ) {
@@ -207,7 +207,7 @@ fn apply_common_args(
     }
 }
 
-fn execute_helm(helm_command: &mut Command) {
+fn execute_helm(helm_command: &mut ProcessCommand) {
     println!("about to execute {:?}", helm_command);
     let output: Output = helm_command
         .spawn()
@@ -303,7 +303,7 @@ fn handle_upgrade(matches: &ArgMatches, command: &Option<&str>, helm_home_dir: S
 fn get_and_set_chart_name(
     variable_raw: &mut GlobalVariableRawMap,
     upgrade_command: &ArgMatches,
-    helm_command: &dyn Command,
+    helm_command: &mut ProcessCommand,
 ) {
     if upgrade_command.is_present("CHART") {
         let chart_path = upgrade_command.value_of("CHART").unwrap();
