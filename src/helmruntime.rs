@@ -26,10 +26,6 @@ impl HelmRuntime {
         }
     }
 
-    pub fn test(&self) {
-        println!("help");
-    }
-
     pub(crate) fn get_raw_variables(&self) -> &HashMap<String, String> {
         &self.variable_raw
     }

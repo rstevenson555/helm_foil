@@ -1,6 +1,6 @@
 use clap::ArgMatches;
 
-use crate::executehelm::HelmRuntime;
+use crate::helmruntime::HelmRuntime;
 
 pub(crate) trait Command<'a> {
     // Traits can provide default method definitions.

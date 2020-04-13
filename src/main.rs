@@ -6,12 +6,12 @@ use clap::{
 };
 
 use command::Command;
-use executehelm::HelmRuntime;
+use helmruntime::HelmRuntime;
 use installcommand::InstallCommand;
 use upgradecommand::UpgradeCommand;
 
 mod command;
-mod executehelm;
+mod helmruntime;
 mod installcommand;
 mod upgradecommand;
 
@@ -146,14 +146,14 @@ fn main() {
     let helm_runtime = HelmRuntime::new();
     match matches.subcommand_name() {
         Some("install") => {
-            let command: InstallCommand = InstallCommand::new(&helm_runtime);
+            let command = InstallCommand::new(&helm_runtime);
             command.run(&matches, &matches.subcommand_name(), helm_home_dir);
         }
         Some("upgrade") => {
-            let command: UpgradeCommand = UpgradeCommand::new(&helm_runtime);
+            let command = UpgradeCommand::new(&helm_runtime);
             command.run(&matches, &matches.subcommand_name(), helm_home_dir);
         }
-        _ => {}
+        _ => panic!("Unknown command, only install/upgrade are currently supported"),
     }
     //    match matches.subcommand_name() {
     //        Some("install") => {
