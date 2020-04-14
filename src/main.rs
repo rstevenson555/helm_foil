@@ -124,12 +124,24 @@ impl Main {
 }
 
 // static dispatch, as a generic method
-fn func<'a, T: Command<'a>>(command: &'a T) {
-    println!("do this, static dispatch");
+fn run_static_dispatch<'a, T: Command<'a>>(
+    command: &'a mut T,
+    matches: &ArgMatches,
+    commandline: &Option<&str>,
+    helm_home_dir: String,
+) {
+    command.echo("do this, static dispatch");
+    command.run(matches, commandline, helm_home_dir);
 }
 
-fn myfunc(command: &dyn Command) {
-    println!("do this dynamic dispatch");
+fn run_dynamic_dispatch(
+    command: &mut dyn command::Command<'_>,
+    matches: &ArgMatches,
+    commandline: &Option<&str>,
+    helm_home_dir: String,
+) {
+    command.echo("do this dynamic dispatch");
+    command.run(matches, commandline, helm_home_dir);
 }
 
 fn main() {
@@ -143,15 +155,25 @@ fn main() {
     let main: Main = Main::new();
     let matches: ArgMatches = main.parse_command_line();
 
-    let helm_runtime = HelmRuntime::new();
+    let mut helm_runtime = HelmRuntime::new();
     match matches.subcommand_name() {
         Some("install") => {
-            let command = InstallCommand::new(&helm_runtime);
-            command.run(&matches, &matches.subcommand_name(), helm_home_dir);
+            let mut command = InstallCommand::new(&mut helm_runtime);
+            run_dynamic_dispatch(
+                &mut command,
+                &matches,
+                &matches.subcommand_name(),
+                helm_home_dir,
+            );
         }
         Some("upgrade") => {
-            let command = UpgradeCommand::new(&helm_runtime);
-            command.run(&matches, &matches.subcommand_name(), helm_home_dir);
+            let mut command = UpgradeCommand::new(&mut helm_runtime);
+            run_dynamic_dispatch(
+                &mut command,
+                &matches,
+                &matches.subcommand_name(),
+                helm_home_dir,
+            );
         }
         _ => panic!("Unknown command, only install/upgrade are currently supported"),
     }

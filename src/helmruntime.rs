@@ -9,28 +9,26 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command as ProcessCommand, Output};
 
-type GlobalVariableMap<'a> = HashMap<String, String>;
-type GlobalVariableRawMap<'a> = HashMap<String, String>;
-
 #[derive(Debug, Clone)]
 pub(crate) struct HelmRuntime {
-    variable_raw: HashMap<String, String>,
-    variable_formatted: HashMap<String, String>,
+    implicit_variables: HashMap<String, String>,
+    explicit_variables: HashMap<String, String>,
 }
 
 impl HelmRuntime {
     pub(crate) fn new() -> HelmRuntime {
         HelmRuntime {
-            variable_raw: HashMap::new(),
-            variable_formatted: HashMap::new(),
+            implicit_variables: HashMap::new(),
+            explicit_variables: HashMap::new(),
         }
     }
 
-    pub(crate) fn get_raw_variables(&self) -> &HashMap<String, String> {
-        &self.variable_raw
+    pub(crate) fn set_implicit_var(&mut self, key: String, value: String) {
+        self.implicit_variables.insert(key, value);
     }
-    pub(crate) fn get_formatted_variables(&self) -> &HashMap<String, String> {
-        &self.variable_formatted
+
+    pub(crate) fn set_explicit_var(&mut self, key: String, value: String) {
+        self.explicit_variables.insert(key, value);
     }
 
     pub(crate) fn read_values_file(&self, filename: &str) -> String {
@@ -43,64 +41,78 @@ impl HelmRuntime {
     /*
     make the pattern that we are matching against
     */
-    pub(crate) fn make_pattern(&self, var: &str) -> String {
+    pub(crate) fn make_regex_pattern(&self, var: &str) -> String {
         format!("(?i)\\{{\\{{\\s*.{}\\s*\\}}\\}}", var)
     }
 
-    pub(crate) fn replace_implicit_vars(
-        &self,
-        result: &mut String,
-        variable_raw: &GlobalVariableRawMap,
-    ) {
-        let release_name_pattern = Regex::new(self.make_pattern("Release.Name").as_str()).unwrap();
+    pub(crate) fn replace_implicit_vars(&self, result: &mut String) {
+        let release_name_pattern =
+            Regex::new(self.make_regex_pattern("Release.Name").as_str()).unwrap();
 
-        if variable_raw.contains_key("release.name") {
+        if self.implicit_variables.contains_key("release.name") {
             *result = release_name_pattern
                 .replace_all(
                     result.as_str(),
-                    variable_raw.get("release.name").unwrap().as_str(),
+                    self.implicit_variables
+                        .get("release.name")
+                        .unwrap()
+                        .as_str(),
                 )
                 .into_owned();
         }
-        let chart_name_pattern = Regex::new(self.make_pattern("Chart.Name").as_str()).unwrap();
+        let chart_name_pattern =
+            Regex::new(self.make_regex_pattern("Chart.Name").as_str()).unwrap();
 
-        if variable_raw.contains_key("chart.name") {
+        if self.implicit_variables.contains_key("chart.name") {
             *result = chart_name_pattern
                 .replace_all(
                     result.as_str(),
-                    variable_raw.get("chart.name").unwrap().as_str(),
+                    self.implicit_variables.get("chart.name").unwrap().as_str(),
                 )
                 .into_owned();
         }
 
-        let branch_name_pattern = Regex::new(self.make_pattern("Branch.Name").as_str()).unwrap();
-        if variable_raw.contains_key("source.branch") {
+        let branch_name_pattern =
+            Regex::new(self.make_regex_pattern("Branch.Name").as_str()).unwrap();
+        if self.implicit_variables.contains_key("source.branch") {
             *result = branch_name_pattern
                 .replace_all(
                     result.as_str(),
-                    variable_raw.get("source.branch").unwrap().as_str(),
+                    self.implicit_variables
+                        .get("source.branch")
+                        .unwrap()
+                        .as_str(),
                 )
                 .into_owned();
         }
 
         let previous_branch_pattern =
-            Regex::new(self.make_pattern("Previous.Branch").as_str()).unwrap();
-        if variable_raw.contains_key("previous.branch") {
+            Regex::new(self.make_regex_pattern("Previous.Branch").as_str()).unwrap();
+        if self.implicit_variables.contains_key("previous.branch") {
             *result = previous_branch_pattern
                 .replace_all(
                     result.as_str(),
-                    variable_raw.get("previous.branch").unwrap().as_str(),
+                    self.implicit_variables
+                        .get("previous.branch")
+                        .unwrap()
+                        .as_str(),
                 )
                 .into_owned();
         }
 
-        let starting_canary_percentage_pattern =
-            Regex::new(self.make_pattern("Starting.Canary.Percentage").as_str()).unwrap();
-        if variable_raw.contains_key("starting.canary.percentage") {
+        let starting_canary_percentage_pattern = Regex::new(
+            self.make_regex_pattern("Starting.Canary.Percentage")
+                .as_str(),
+        )
+        .unwrap();
+        if self
+            .implicit_variables
+            .contains_key("starting.canary.percentage")
+        {
             *result = starting_canary_percentage_pattern
                 .replace_all(
                     result.as_str(),
-                    variable_raw
+                    self.implicit_variables
                         .get("starting.canary.percentage")
                         .unwrap()
                         .as_str(),
@@ -113,13 +125,12 @@ impl HelmRuntime {
         &self,
         override_file_result: &mut String,
         pattern_str: &str,
-        variable_formatted: &GlobalVariableMap,
     ) {
         let pattern = Regex::new(pattern_str).unwrap();
         *override_file_result = pattern
             .replace_all(
                 override_file_result.as_str(),
-                variable_formatted
+                self.explicit_variables
                     .get(pattern_str.to_owned().as_str())
                     .unwrap()
                     .as_str(),
@@ -128,8 +139,7 @@ impl HelmRuntime {
     }
 
     pub(crate) fn get_and_set_chart_name(
-        &self,
-        variable_raw: &mut GlobalVariableRawMap,
+        &mut self,
         upgrade_command: &ArgMatches,
         helm_command: &mut ProcessCommand,
     ) {
@@ -138,32 +148,34 @@ impl HelmRuntime {
             helm_command.arg(chart_path);
             let path = Path::new(chart_path);
             // add global variable key/value 'chart.name'
-            variable_raw.insert(
+            self.set_implicit_var(
                 "chart.name".to_string(),
                 path.file_name().unwrap().to_str().unwrap().to_string(),
             );
             // add global variable key/value 'chart.path'
-            variable_raw.insert("chart.path".to_string(), chart_path.to_string());
+            self.set_implicit_var("chart.path".to_string(), chart_path.to_string());
         }
     }
 
     pub(crate) fn apply_common_args(
-        &self,
+        &mut self,
         global_args: &ArgMatches,
         subcommand: &ArgMatches,
         helm_command: &mut ProcessCommand,
-        variable_formatted: &mut GlobalVariableMap,
-        variable_raw: &mut GlobalVariableRawMap,
     ) {
         let config_env_yaml: &mut String = &mut "".to_string();
         let values_yaml: &mut String = &mut "".to_string();
 
-        if variable_raw.contains_key("chart.path") {
+        if self.implicit_variables.contains_key("chart.path") {
             *values_yaml = self.read_values_file(
-                format!("{}/values.yaml", variable_raw.get("chart.path").unwrap()).as_str(),
+                format!(
+                    "{}/values.yaml",
+                    self.implicit_variables.get("chart.path").unwrap()
+                )
+                .as_str(),
             );
             // VALUES file
-            self.replace_implicit_vars(values_yaml, variable_raw);
+            self.replace_implicit_vars(values_yaml);
         } else {
             panic!("missing chart specified on the command line");
         }
@@ -185,30 +197,30 @@ impl HelmRuntime {
                 // convert the --set arguments on the command line to global variables formatted like
                 // {{.SetKey}}; example image.tag becomes {{.Values.image.tag}} template variable
                 let variable_format =
-                    self.make_pattern(format!("Values.{}", split_parts[0]).as_str());
+                    self.make_regex_pattern(format!("Values.{}", split_parts[0]).as_str());
                 println!("set template variable {}", variable_format);
 
-                variable_formatted.insert(variable_format.to_owned(), split_parts[1].to_owned());
-                variable_raw.insert(split_parts[0].to_owned(), split_parts[1].to_owned());
+                self.set_explicit_var(variable_format.to_owned(), split_parts[1].to_owned());
+                self.set_implicit_var(split_parts[0].to_owned(), split_parts[1].to_owned());
 
                 // now replace the explicit variables declared from the command line from the -f override file
                 // env CONFIG/*.yaml files
-                self.replace_explicit_vars(config_env_yaml, &variable_format, variable_formatted);
+                self.replace_explicit_vars(config_env_yaml, &variable_format);
 
                 // now replace the explicit variables declared from the command line from the chart/values.yaml file
                 // VALUES file
-                self.replace_explicit_vars(values_yaml, &variable_format, variable_formatted);
+                self.replace_explicit_vars(values_yaml, &variable_format);
 
                 helm_command.args(&["--set", (*set_var).to_string().as_str()]);
             }
 
             // replace values.yaml contents
-            self.replace_implicit_vars(values_yaml, variable_raw);
+            self.replace_implicit_vars(values_yaml);
 
             if subcommand.is_present("valueFiles") {
                 // replace global vars
                 // create more implicit variables in config/*.yaml
-                self.replace_implicit_vars(config_env_yaml, variable_raw);
+                self.replace_implicit_vars(config_env_yaml);
             }
 
             println!("{}", config_env_yaml); // => "xxxxx xxxxx!"
@@ -244,7 +256,7 @@ impl HelmRuntime {
 
         match File::create(format!(
             "{}/values.yaml",
-            variable_raw.get("chart.path").unwrap()
+            self.implicit_variables.get("chart.path").unwrap()
         )) {
             Ok(mut file) => {
                 if let Err(err) = file.write_all(values_yaml.as_bytes()) {
