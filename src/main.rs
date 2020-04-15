@@ -131,7 +131,7 @@ fn run_static_dispatch<'a, T: Command<'a>>(
     helm_home_dir: String,
 ) {
     command.echo("do this, static dispatch");
-    command.run(matches, commandline, helm_home_dir);
+    command.execute(matches, commandline, helm_home_dir);
 }
 
 fn run_dynamic_dispatch(
@@ -141,7 +141,7 @@ fn run_dynamic_dispatch(
     helm_home_dir: String,
 ) {
     command.echo("do this dynamic dispatch");
-    command.run(matches, commandline, helm_home_dir);
+    command.execute(matches, commandline, helm_home_dir);
 }
 
 fn main() {

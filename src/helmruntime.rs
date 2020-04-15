@@ -243,17 +243,12 @@ impl HelmRuntime {
         }
 
         // write output
-        match File::create(override_filename) {
-            Ok(mut file) => {
-                if let Err(err) = file.write_all(config_env_yaml.as_bytes()) {
-                    panic!("Error writing file {}", err);
-                }
-            }
-            Err(e) => {
-                panic!("Error writing override file {}", e);
-            }
-        }
+        HelmRuntime::write_env_override_file(config_env_yaml, override_filename);
 
+        self.write_values_file(values_yaml)
+    }
+
+    fn write_values_file(&mut self, values_yaml: &mut String) -> () {
         match File::create(format!(
             "{}/values.yaml",
             self.implicit_variables.get("chart.path").unwrap()
@@ -265,6 +260,19 @@ impl HelmRuntime {
             }
             Err(e) => {
                 panic!("Error writing values file out {}", e);
+            }
+        }
+    }
+
+    fn write_env_override_file(config_env_yaml: &mut String, override_filename: &mut String) {
+        match File::create(override_filename) {
+            Ok(mut file) => {
+                if let Err(err) = file.write_all(config_env_yaml.as_bytes()) {
+                    panic!("Error writing file {}", err);
+                }
+            }
+            Err(e) => {
+                panic!("Error writing override file {}", e);
             }
         }
     }

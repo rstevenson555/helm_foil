@@ -22,7 +22,7 @@ impl<'a> Command<'a> for UpgradeCommand<'a> {
         self.helm_runtime
     }
 
-    fn run(&mut self, matches: &ArgMatches, command: &Option<&str>, helm_home_dir: String) {
+    fn execute(&mut self, matches: &ArgMatches, command: &Option<&str>, helm_home_dir: String) {
         if let Some(upgrade_command) = matches.subcommand_matches(command.unwrap()) {
             let mut helm_command = ProcessCommand::new(format!("{}/helm", helm_home_dir));
             helm_command
