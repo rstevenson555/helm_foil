@@ -4,7 +4,9 @@ use std::fs;
 use clap::ArgMatches;
 use regex::Regex;
 
+use std::borrow::Borrow;
 use std::fs::File;
+use std::hash::Hash;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command as ProcessCommand, Output};
@@ -31,6 +33,30 @@ impl HelmRuntime {
         self.explicit_variables.insert(key, value);
     }
 
+    /**
+    The idea here is that you can use any type as a lookup key, as long as that type could be “borrowed” from the stored key type.
+    http://idubrov.name/rust/2018/06/01/tricking-the-hashmap.html
+    **/
+    fn get_implicit_var<K: ?Sized>(&self, key: &K) -> Option<&String>
+    where
+        String: Borrow<K>,
+        K: Hash + Eq,
+    {
+        self.implicit_variables.get(key)
+    }
+
+    /**
+    The idea here is that you can use any type as a lookup key, as long as that type could be “borrowed” from the stored key type.
+    http://idubrov.name/rust/2018/06/01/tricking-the-hashmap.html
+    **/
+    fn get_explicit_var<K: ?Sized>(&self, key: &K) -> Option<&String>
+    where
+        String: Borrow<K>,
+        K: Hash + Eq,
+    {
+        self.explicit_variables.get(key)
+    }
+
     fn read_values_file(&self, filename: &str) -> String {
         let error_msg = format!("Something went wrong reading the file {}", filename);
         let estr: &str = error_msg.as_str();
@@ -49,7 +75,7 @@ impl HelmRuntime {
         if let Ok(release_name_pattern) =
             Regex::new(self.make_regex_pattern(".Release.Name").as_str())
         {
-            if let Some(var) = self.implicit_variables.get("release.name") {
+            if let Some(var) = self.get_implicit_var("release.name") {
                 *result = release_name_pattern
                     .replace_all(result.as_str(), var.as_str())
                     .into_owned();
@@ -57,7 +83,7 @@ impl HelmRuntime {
         }
         if let Ok(chart_name_pattern) = Regex::new(self.make_regex_pattern(".Chart.Name").as_str())
         {
-            if let Some(var) = self.implicit_variables.get("chart.name") {
+            if let Some(var) = self.get_implicit_var("chart.name") {
                 *result = chart_name_pattern
                     .replace_all(result.as_str(), var.as_str())
                     .into_owned();
@@ -67,7 +93,7 @@ impl HelmRuntime {
         if let Ok(branch_name_pattern) =
             Regex::new(self.make_regex_pattern(".Branch.Name").as_str())
         {
-            if let Some(var) = self.implicit_variables.get("source.branch") {
+            if let Some(var) = self.get_implicit_var("source.branch") {
                 *result = branch_name_pattern
                     .replace_all(result.as_str(), var.as_str())
                     .into_owned();
@@ -77,7 +103,7 @@ impl HelmRuntime {
         if let Ok(previous_branch_pattern) =
             Regex::new(self.make_regex_pattern(".Previous.Branch").as_str())
         {
-            if let Some(var) = self.implicit_variables.get("previous.branch") {
+            if let Some(var) = self.get_implicit_var("previous.branch") {
                 *result = previous_branch_pattern
                     .replace_all(result.as_str(), var.as_str())
                     .into_owned();
@@ -88,7 +114,7 @@ impl HelmRuntime {
             self.make_regex_pattern(".Starting.Canary.Percentage")
                 .as_str(),
         ) {
-            if let Some(var) = self.implicit_variables.get("starting.canary.percentage") {
+            if let Some(var) = self.get_implicit_var("starting.canary.percentage") {
                 *result = starting_canary_percentage_pattern
                     .replace_all(result.as_str(), var.as_str())
                     .into_owned();
@@ -98,7 +124,7 @@ impl HelmRuntime {
 
     fn replace_explicit_vars(&self, override_file_result: &mut String, pattern_str: &str) {
         if let Ok(pattern) = Regex::new(pattern_str) {
-            if let Some(var) = self.explicit_variables.get(pattern_str.to_owned().as_str()) {
+            if let Some(var) = self.get_explicit_var(pattern_str) {
                 *override_file_result = pattern
                     .replace_all(override_file_result.as_str(), var.as_str())
                     .into_owned();
@@ -134,7 +160,7 @@ impl HelmRuntime {
         let config_env_yaml: &mut String = &mut "".to_string();
         let values_yaml: &mut String = &mut "".to_string();
 
-        match self.implicit_variables.get("chart.path") {
+        match self.get_implicit_var("chart.path") {
             Some(chart_path) => {
                 *values_yaml =
                     self.read_values_file(format!("{}/values.yaml", chart_path).as_str());
@@ -212,7 +238,7 @@ impl HelmRuntime {
     }
 
     fn write_values_file(&mut self, values_yaml: &mut String) {
-        if let Some(chart_path) = self.implicit_variables.get("chart.path") {
+        if let Some(chart_path) = self.get_implicit_var("chart.path") {
             match File::create(format!("{}/values.yaml", chart_path)) {
                 Ok(mut file) => {
                     if let Err(err) = file.write_all(values_yaml.as_bytes()) {
