@@ -21,31 +21,36 @@ impl<'a> Command<'a> for UpgradeCommand<'a> {
         self.helm_runtime
     }
 
-    fn execute(&mut self, matches: &ArgMatches, command: &Option<&str>, helm_home_dir: String) {
-        if let Some(upgrade_command) = matches.subcommand_matches(command.unwrap()) {
-            let mut helm_command = ProcessCommand::new(format!("{}/helm", helm_home_dir));
-            helm_command
-                .stderr(Stdio::piped())
-                .stdout(Stdio::piped())
-                .arg(command.unwrap());
+    fn execute(&mut self, matches: &ArgMatches, commandline: &Option<&str>, helm_home_dir: String) {
+        if let Some(command) = commandline {
+            if let Some(upgrade_command) = matches.subcommand_matches(command) {
+                let mut helm_command = ProcessCommand::new(format!("{}/helm", helm_home_dir));
+                helm_command
+                    .stderr(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .arg(command);
 
-            if let Some(release) = upgrade_command.value_of("RELEASE") {
-                helm_command.arg(release);
-                // add global variable key/value 'release.name'
+                if let Some(release) = upgrade_command.value_of("RELEASE") {
+                    helm_command.arg(release);
+                    // add global variable key/value 'release.name'
+                    self.get_helm_runtime()
+                        .set_implicit_var("release.name".to_string(), release.to_string());
+                }
                 self.get_helm_runtime()
-                    .set_implicit_var("release.name".to_string(), release.to_string());
+                    .get_and_set_chart_name(upgrade_command, &mut helm_command);
+
+                if upgrade_command.is_present("force") {
+                    helm_command.arg("--force");
+                }
+
+                self.get_helm_runtime().apply_common_args(
+                    matches,
+                    upgrade_command,
+                    &mut helm_command,
+                );
+
+                self.get_helm_runtime().execute_helm(&mut helm_command)
             }
-            self.get_helm_runtime()
-                .get_and_set_chart_name(upgrade_command, &mut helm_command);
-
-            if upgrade_command.is_present("force") {
-                helm_command.arg("--force");
-            }
-
-            self.get_helm_runtime()
-                .apply_common_args(matches, upgrade_command, &mut helm_command);
-
-            self.get_helm_runtime().execute_helm(&mut helm_command)
         }
     }
 }
