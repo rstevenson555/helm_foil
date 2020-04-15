@@ -32,13 +32,11 @@ impl<'a> Command<'a> for InstallCommand<'a> {
             self.get_helm_runtime()
                 .get_and_set_chart_name(install_command, &mut helm_command);
 
-            if install_command.is_present("name") {
-                helm_command.args(&["--name", install_command.value_of("name").unwrap()]);
+            if let Some(release) = install_command.value_of("name") {
+                helm_command.args(&["--name", release]);
                 // add global variable key/value 'release.name'
-                self.get_helm_runtime().set_implicit_var(
-                    "release.name".to_string(),
-                    install_command.value_of("name").unwrap().to_string(),
-                );
+                self.get_helm_runtime()
+                    .set_implicit_var("release.name".to_string(), release.to_string());
             }
 
             self.get_helm_runtime()

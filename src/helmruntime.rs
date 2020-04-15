@@ -31,7 +31,7 @@ impl HelmRuntime {
         self.explicit_variables.insert(key, value);
     }
 
-    pub(crate) fn read_values_file(&self, filename: &str) -> String {
+    fn read_values_file(&self, filename: &str) -> String {
         let error_msg = format!("Something went wrong reading the file {}", filename);
         let estr: &str = error_msg.as_str();
 
@@ -41,101 +41,69 @@ impl HelmRuntime {
     /*
     make the pattern that we are matching against
     */
-    pub(crate) fn make_regex_pattern(&self, var: &str) -> String {
-        format!("(?i)\\{{\\{{\\s*.{}\\s*\\}}\\}}", var)
+    fn make_regex_pattern<'a>(&self, var: &str) -> String {
+        format!("(?i)\\{{\\{{\\s*{}\\s*\\}}\\}}", var)
     }
 
-    pub(crate) fn replace_implicit_vars(&self, result: &mut String) {
-        let release_name_pattern =
-            Regex::new(self.make_regex_pattern("Release.Name").as_str()).unwrap();
-
-        if self.implicit_variables.contains_key("release.name") {
-            *result = release_name_pattern
-                .replace_all(
-                    result.as_str(),
-                    self.implicit_variables
-                        .get("release.name")
-                        .unwrap()
-                        .as_str(),
-                )
-                .into_owned();
-        }
-        let chart_name_pattern =
-            Regex::new(self.make_regex_pattern("Chart.Name").as_str()).unwrap();
-
-        if self.implicit_variables.contains_key("chart.name") {
-            *result = chart_name_pattern
-                .replace_all(
-                    result.as_str(),
-                    self.implicit_variables.get("chart.name").unwrap().as_str(),
-                )
-                .into_owned();
-        }
-
-        let branch_name_pattern =
-            Regex::new(self.make_regex_pattern("Branch.Name").as_str()).unwrap();
-        if self.implicit_variables.contains_key("source.branch") {
-            *result = branch_name_pattern
-                .replace_all(
-                    result.as_str(),
-                    self.implicit_variables
-                        .get("source.branch")
-                        .unwrap()
-                        .as_str(),
-                )
-                .into_owned();
-        }
-
-        let previous_branch_pattern =
-            Regex::new(self.make_regex_pattern("Previous.Branch").as_str()).unwrap();
-        if self.implicit_variables.contains_key("previous.branch") {
-            *result = previous_branch_pattern
-                .replace_all(
-                    result.as_str(),
-                    self.implicit_variables
-                        .get("previous.branch")
-                        .unwrap()
-                        .as_str(),
-                )
-                .into_owned();
-        }
-
-        let starting_canary_percentage_pattern = Regex::new(
-            self.make_regex_pattern("Starting.Canary.Percentage")
-                .as_str(),
-        )
-        .unwrap();
-        if self
-            .implicit_variables
-            .contains_key("starting.canary.percentage")
+    fn replace_implicit_vars(&self, result: &mut String) {
+        if let Ok(release_name_pattern) =
+            Regex::new(self.make_regex_pattern(".Release.Name").as_str())
         {
-            *result = starting_canary_percentage_pattern
-                .replace_all(
-                    result.as_str(),
-                    self.implicit_variables
-                        .get("starting.canary.percentage")
-                        .unwrap()
-                        .as_str(),
-                )
-                .into_owned();
+            if let Some(var) = self.implicit_variables.get("release.name") {
+                *result = release_name_pattern
+                    .replace_all(result.as_str(), var.as_str())
+                    .into_owned();
+            }
+        }
+        if let Ok(chart_name_pattern) = Regex::new(self.make_regex_pattern(".Chart.Name").as_str())
+        {
+            if let Some(var) = self.implicit_variables.get("chart.name") {
+                *result = chart_name_pattern
+                    .replace_all(result.as_str(), var.as_str())
+                    .into_owned();
+            }
+        }
+
+        if let Ok(branch_name_pattern) =
+            Regex::new(self.make_regex_pattern(".Branch.Name").as_str())
+        {
+            if let Some(var) = self.implicit_variables.get("source.branch") {
+                *result = branch_name_pattern
+                    .replace_all(result.as_str(), var.as_str())
+                    .into_owned();
+            }
+        }
+
+        if let Ok(previous_branch_pattern) =
+            Regex::new(self.make_regex_pattern(".Previous.Branch").as_str())
+        {
+            if let Some(var) = self.implicit_variables.get("previous.branch") {
+                *result = previous_branch_pattern
+                    .replace_all(result.as_str(), var.as_str())
+                    .into_owned();
+            }
+        }
+
+        if let Ok(starting_canary_percentage_pattern) = Regex::new(
+            self.make_regex_pattern(".Starting.Canary.Percentage")
+                .as_str(),
+        ) {
+            if let Some(var) = self.implicit_variables.get("starting.canary.percentage") {
+                *result = starting_canary_percentage_pattern
+                    .replace_all(result.as_str(), var.as_str())
+                    .into_owned();
+            }
         }
     }
 
-    pub(crate) fn replace_explicit_vars(
-        &self,
-        override_file_result: &mut String,
-        pattern_str: &str,
-    ) {
-        let pattern = Regex::new(pattern_str).unwrap();
-        *override_file_result = pattern
-            .replace_all(
-                override_file_result.as_str(),
-                self.explicit_variables
-                    .get(pattern_str.to_owned().as_str())
-                    .unwrap()
-                    .as_str(),
-            )
-            .into_owned();
+    fn replace_explicit_vars(&self, override_file_result: &mut String, pattern_str: &str) {
+        if let Ok(pattern) = Regex::new(pattern_str) {
+            if let Some(var) = self.explicit_variables.get(pattern_str.to_owned().as_str()) {
+                *override_file_result = pattern
+                    .replace_all(override_file_result.as_str(), var.as_str())
+                    .into_owned();
+            }
+        }
     }
 
     pub(crate) fn get_and_set_chart_name(
@@ -143,17 +111,18 @@ impl HelmRuntime {
         upgrade_command: &ArgMatches,
         helm_command: &mut ProcessCommand,
     ) {
-        if upgrade_command.is_present("CHART") {
-            let chart_path = upgrade_command.value_of("CHART").unwrap();
+        if let Some(chart_path) = upgrade_command.value_of("CHART") {
             helm_command.arg(chart_path);
             let path = Path::new(chart_path);
             // add global variable key/value 'chart.name'
-            self.set_implicit_var(
-                "chart.name".to_string(),
-                path.file_name().unwrap().to_str().unwrap().to_string(),
-            );
-            // add global variable key/value 'chart.path'
-            self.set_implicit_var("chart.path".to_string(), chart_path.to_string());
+            if let Some(filename) = path.file_name() {
+                self.set_implicit_var(
+                    "chart.name".to_string(),
+                    filename.to_str().unwrap().to_string(),
+                );
+                // add global variable key/value 'chart.path'
+                self.set_implicit_var("chart.path".to_string(), chart_path.to_string());
+            }
         }
     }
 
@@ -166,38 +135,36 @@ impl HelmRuntime {
         let config_env_yaml: &mut String = &mut "".to_string();
         let values_yaml: &mut String = &mut "".to_string();
 
-        if self.implicit_variables.contains_key("chart.path") {
-            *values_yaml = self.read_values_file(
-                format!(
-                    "{}/values.yaml",
-                    self.implicit_variables.get("chart.path").unwrap()
-                )
-                .as_str(),
-            );
-            // VALUES file
-            self.replace_implicit_vars(values_yaml);
-        } else {
-            panic!("missing chart specified on the command line");
+        match self.implicit_variables.get("chart.path") {
+            Some(chart_path) => {
+                *values_yaml =
+                    self.read_values_file(format!("{}/values.yaml", chart_path).as_str());
+                // VALUES file
+                self.replace_implicit_vars(values_yaml);
+            }
+            None => {
+                panic!("missing chart specified on the command line");
+            }
         }
 
         let override_filename: &mut String = &mut "".to_string();
-        if subcommand.is_present("valueFiles") {
-            *override_filename = subcommand.value_of("valueFiles").unwrap().to_string();
+        if let Some(override_file) = subcommand.value_of("valueFiles") {
+            *override_filename = override_file.to_string();
             helm_command.args(&["-f", override_filename]);
             *config_env_yaml = self.read_values_file(override_filename);
         }
 
-        let set_values: Vec<&str>;
-        if subcommand.is_present("set") {
-            set_values = subcommand.values_of("set").unwrap().collect();
+        let set_values_collection: Vec<&str>;
+        if let Some(set_values) = subcommand.values_of("set") {
+            set_values_collection = set_values.collect();
             // loop over all --sets on the command line
-            for set_var in set_values.iter() {
+            for set_var in set_values_collection.iter() {
                 let split_parts: Vec<&str> = set_var.split('=').collect();
 
                 // convert the --set arguments on the command line to global variables formatted like
                 // {{.SetKey}}; example image.tag becomes {{.Values.image.tag}} template variable
                 let variable_format =
-                    self.make_regex_pattern(format!("Values.{}", split_parts[0]).as_str());
+                    self.make_regex_pattern(format!(".Values.{}", split_parts[0]).as_str());
                 println!("set template variable {}", variable_format);
 
                 self.set_explicit_var(variable_format.to_owned(), split_parts[1].to_owned());
@@ -226,17 +193,14 @@ impl HelmRuntime {
             println!("{}", config_env_yaml); // => "xxxxx xxxxx!"
         }
 
-        if global_args.is_present("tiller-namespace") {
-            helm_command.args(&[
-                "--tiller-namespace",
-                global_args.value_of("tiller-namespace").unwrap(),
-            ]);
+        if let Some(tiller_namespace) = global_args.value_of("tiller-namespace") {
+            helm_command.args(&["--tiller-namespace", tiller_namespace]);
         }
-        if global_args.is_present("namespace") {
-            helm_command.args(&["--namespace", global_args.value_of("namespace").unwrap()]);
+        if let Some(namespace) = global_args.value_of("namespace") {
+            helm_command.args(&["--namespace", namespace]);
         }
-        if global_args.is_present("timeout") {
-            helm_command.args(&["--timeout", global_args.value_of("timeout").unwrap()]);
+        if let Some(timeout) = global_args.value_of("timeout") {
+            helm_command.args(&["--timeout", timeout]);
         }
         if global_args.is_present("debug") {
             helm_command.arg("--debug");

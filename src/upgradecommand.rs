@@ -3,7 +3,6 @@ use std::process::{Command as ProcessCommand, Stdio};
 use crate::command::Command;
 use crate::helmruntime::HelmRuntime;
 use clap::ArgMatches;
-use std::collections::HashMap;
 
 pub(crate) struct UpgradeCommand<'a> {
     helm_runtime: &'a mut HelmRuntime,
@@ -30,13 +29,11 @@ impl<'a> Command<'a> for UpgradeCommand<'a> {
                 .stdout(Stdio::piped())
                 .arg(command.unwrap());
 
-            if upgrade_command.is_present("RELEASE") {
-                helm_command.arg(upgrade_command.value_of("RELEASE").unwrap());
+            if let Some(release) = upgrade_command.value_of("RELEASE") {
+                helm_command.arg(release);
                 // add global variable key/value 'release.name'
-                self.get_helm_runtime().set_implicit_var(
-                    "release.name".to_string(),
-                    upgrade_command.value_of("RELEASE").unwrap().to_string(),
-                );
+                self.get_helm_runtime()
+                    .set_implicit_var("release.name".to_string(), release.to_string());
             }
             self.get_helm_runtime()
                 .get_and_set_chart_name(upgrade_command, &mut helm_command);
