@@ -243,9 +243,9 @@ impl HelmRuntime {
         println!("about to execute {:?}", helm_command);
         let output: Output = helm_command
             .spawn()
-            .expect("failed to spawn helm")
+            .expect("[helm] failed to spawn helm")
             .wait_with_output()
-            .expect("failed to wait on helm to complete");
+            .expect("[helm] failed to wait on helm to complete");
 
         if output.status.success() {
             if let Ok(out) = String::from_utf8(output.stdout) {
