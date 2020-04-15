@@ -116,10 +116,9 @@ impl HelmRuntime {
             let path = Path::new(chart_path);
             // add global variable key/value 'chart.name'
             if let Some(filename) = path.file_name() {
-                self.set_implicit_var(
-                    "chart.name".to_string(),
-                    filename.to_str().unwrap().to_string(),
-                );
+                if let Some(filename_str) = filename.to_str() {
+                    self.set_implicit_var("chart.name".to_string(), filename_str.to_string());
+                }
                 // add global variable key/value 'chart.path'
                 self.set_implicit_var("chart.path".to_string(), chart_path.to_string());
             }
@@ -143,7 +142,7 @@ impl HelmRuntime {
                 self.replace_implicit_vars(values_yaml);
             }
             None => {
-                panic!("missing chart specified on the command line");
+                panic!("[helm] missing chart specified on the command line");
             }
         }
 
@@ -212,18 +211,17 @@ impl HelmRuntime {
         self.write_values_file(values_yaml)
     }
 
-    fn write_values_file(&mut self, values_yaml: &mut String) -> () {
-        match File::create(format!(
-            "{}/values.yaml",
-            self.implicit_variables.get("chart.path").unwrap()
-        )) {
-            Ok(mut file) => {
-                if let Err(err) = file.write_all(values_yaml.as_bytes()) {
-                    panic!("Error writing file {}", err);
+    fn write_values_file(&mut self, values_yaml: &mut String) {
+        if let Some(chart_path) = self.implicit_variables.get("chart.path") {
+            match File::create(format!("{}/values.yaml", chart_path)) {
+                Ok(mut file) => {
+                    if let Err(err) = file.write_all(values_yaml.as_bytes()) {
+                        panic!("[helm] Error writing file {}", err);
+                    }
                 }
-            }
-            Err(e) => {
-                panic!("Error writing values file out {}", e);
+                Err(e) => {
+                    panic!("[helm] Error writing values file out {}", e);
+                }
             }
         }
     }
@@ -232,11 +230,11 @@ impl HelmRuntime {
         match File::create(override_filename) {
             Ok(mut file) => {
                 if let Err(err) = file.write_all(config_env_yaml.as_bytes()) {
-                    panic!("Error writing file {}", err);
+                    panic!("[helm] Error writing file {}", err);
                 }
             }
             Err(e) => {
-                panic!("Error writing override file {}", e);
+                panic!("[helm] Error writing override file {}", e);
             }
         }
     }
