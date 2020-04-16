@@ -68,10 +68,9 @@ impl HelmRuntime {
     /*
     make the pattern that we are matching against
     */
-    fn make_regex_pattern<'a, K: ?Sized>(&'a self, var: &'a K) -> String
+    fn make_regex_pattern<K: ?Sized>(&self, var: &K) -> String
     where
         String: Borrow<K>,
-        K: Hash + Eq,
         K: Display,
     {
         format!("(?i)\\{{\\{{\\s*{}\\s*\\}}\\}}", var)
