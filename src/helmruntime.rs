@@ -5,6 +5,7 @@ use clap::ArgMatches;
 use regex::Regex;
 
 use std::borrow::Borrow;
+use std::fmt::Display;
 use std::fs::File;
 use std::hash::Hash;
 use std::io::Write;
@@ -67,7 +68,12 @@ impl HelmRuntime {
     /*
     make the pattern that we are matching against
     */
-    fn make_regex_pattern<'a>(&self, var: &str) -> String {
+    fn make_regex_pattern<'a, K: ?Sized>(&'a self, var: &'a K) -> String
+    where
+        String: Borrow<K>,
+        K: Hash + Eq,
+        K: Display,
+    {
         format!("(?i)\\{{\\{{\\s*{}\\s*\\}}\\}}", var)
     }
 

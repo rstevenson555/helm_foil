@@ -16,7 +16,7 @@ impl<'a> InstallCommand<'a> {
     }
 }
 
-impl<'a> Command<'a> for InstallCommand<'a> {
+impl<'a> Command for InstallCommand<'a> {
     fn get_helm_runtime(&mut self) -> &mut HelmRuntime {
         self.helm_runtime
     }

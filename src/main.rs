@@ -124,8 +124,8 @@ impl Main {
 }
 
 // static dispatch, as a generic method
-fn run_static_dispatch<'a, T: Command<'a>>(
-    command: &'a mut T,
+fn run_static_dispatch<T: Command>(
+    command: &mut T,
     matches: &ArgMatches,
     commandline: &Option<&str>,
     helm_home_dir: String,
@@ -135,7 +135,7 @@ fn run_static_dispatch<'a, T: Command<'a>>(
 }
 
 fn run_dynamic_dispatch(
-    command: &mut dyn command::Command<'_>,
+    command: &mut dyn command::Command,
     matches: &ArgMatches,
     commandline: &Option<&str>,
     helm_home_dir: String,
@@ -149,7 +149,7 @@ fn main() {
     if let Ok(homedir) = env::var("HELM_HOME") {
         helm_home_dir = homedir;
     } else {
-        panic!("Missing HELM_HOME environment variable");
+        panic!("[helm] Missing HELM_HOME environment variable");
     }
 
     let main: Main = Main::new();
@@ -159,7 +159,7 @@ fn main() {
     match matches.subcommand_name() {
         Some("install") => {
             let mut command = InstallCommand::new(&mut helm_runtime);
-            run_dynamic_dispatch(
+            run_static_dispatch(
                 &mut command,
                 &matches,
                 &matches.subcommand_name(),
@@ -168,14 +168,14 @@ fn main() {
         }
         Some("upgrade") => {
             let mut command = UpgradeCommand::new(&mut helm_runtime);
-            run_dynamic_dispatch(
+            run_static_dispatch(
                 &mut command,
                 &matches,
                 &matches.subcommand_name(),
                 helm_home_dir,
             );
         }
-        _ => panic!("Unknown command, only install/upgrade are currently supported"),
+        _ => panic!("[helm] Unknown command, only install/upgrade are currently supported"),
     }
     //    match matches.subcommand_name() {
     //        Some("install") => {

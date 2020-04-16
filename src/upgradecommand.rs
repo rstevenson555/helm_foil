@@ -16,7 +16,7 @@ impl<'a> UpgradeCommand<'a> {
     }
 }
 
-impl<'a> Command<'a> for UpgradeCommand<'a> {
+impl<'a> Command for UpgradeCommand<'a> {
     fn get_helm_runtime(&mut self) -> &mut HelmRuntime {
         self.helm_runtime
     }
