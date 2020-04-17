@@ -5,3 +5,6 @@ syntax usage is identical to helm so can be swapped in transparently
 
 To view the complete helm use:
 __helm_wrap__ --help or to view help for a specific subcommand do. __helm_wrap__ [subcommand] --help
+
+----
+Give full examples below; and show implicit and explicit variable examples.
